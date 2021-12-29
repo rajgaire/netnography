@@ -1,0 +1,1 @@
+To run this script, you need chrome driver for the version of the chrome install in your computer.
