@@ -1,0 +1,1 @@
+# a script to scrape reviews from google places
