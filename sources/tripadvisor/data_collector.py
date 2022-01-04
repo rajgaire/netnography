@@ -27,7 +27,7 @@ class ReviewCollector:
             os.makedirs(tmp_folder)
 
         link_file = f"{tmp_folder}/{place}.txt"
-        # self.fetch_links(place, country, link_file)
+        self.fetch_links(place, country, link_file)
         reviewed_links = {}
         if os.path.exists(output_file):
             with open(output_file, 'r', encoding="utf-8") as csv_file:
