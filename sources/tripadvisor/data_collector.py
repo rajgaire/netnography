@@ -9,16 +9,14 @@ import os, time
 import csv
 
 class ReviewCollector:
-    driver = None
+    driver_path = None
     debug = True
     info = True
+
     def __init__(self, driver_path, debug=True, info=True) -> None:
-        self.driver = webdriver.Chrome(executable_path=driver_path)
+        self.driver_path = driver_path
         self.debug = debug
         self.info = info
-
-    def __del__(self):
-        self.driver.close()
 
 
     def fetch_reviews(self, place, country, output_file):
@@ -35,7 +33,7 @@ class ReviewCollector:
                     parts = l.split(",")
                     self.debug and print(f"already reviewed = {parts[0]}")
                     if len(parts) > 2:
-                        reviewed_links[parts[0]] = True
+                        reviewed_links[parts[1]] = True
         with open(link_file, "r") as csv:
             for aline in csv:
                 parts = aline.split(",")
@@ -54,7 +52,7 @@ class ReviewCollector:
                     self.fetch_hotel_reviews(url, cat, output_file)
 
     def fetch_links(self, place, country, link_file):
-        driver = self.driver
+        driver = webdriver.Chrome(executable_path=self.driver_path)
         # 1. open https://www.tripadvisor.com/Search?q=<query>""
         url = f'https://www.tripadvisor.com/Search?q={place}'
         self.info and print(f"Searching{url}")
@@ -99,9 +97,10 @@ class ReviewCollector:
                 else:
                     has_more = False
                 time.sleep(2)
+        driver.close()
 
     def fetch_attraction_reviews(self, url, cat, review_file):
-        driver = self.driver
+        driver = webdriver.Chrome(executable_path=self.driver_path)
 
         with open(review_file, 'a', encoding="utf-8") as csv_file:
             csv_writer = csv.writer(csv_file)
@@ -142,6 +141,7 @@ class ReviewCollector:
                             t = review_elm.find_element_by_xpath("./span/span/div[4]/a")
                             title = t.text
                             self.debug and print(f"title={title}")
+                            ancher = t.get_attribute("href")
                             d = review_elm.find_element_by_xpath("./span/span/div[5]")
                             date = d.text
                             self.debug and print(f"date={date}")
@@ -149,15 +149,17 @@ class ReviewCollector:
                             review = r.text.replace("\n", " ").strip()
                             self.debug and print(f"review={review}")
 
-                            csv_writer.writerow([url, cat, date, rating, title, review]) 
-                        except Exception:
-                            pass
+                            csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
+                        except Exception as e:
+                            print(e)
+                            # pass
+        driver.close()
 
     def fetch_hotel_reviews(self, url, cat, review_file):
-        driver = self.driver
         with open(review_file, 'a', encoding="utf-8") as csv_file:
             csv_writer = csv.writer(csv_file)
             self.debug and print(f"# GET HOTEL: {url}")
+            driver = webdriver.Chrome(executable_path=self.driver_path)
             driver.get(url)
                 
             time.sleep(2)
@@ -172,7 +174,9 @@ class ReviewCollector:
                     recview_counter += 1
                     review_elm = reviews[i]
                     self.debug and print(f".{recview_counter}", end="")
-                    title = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/a/span/span").text
+                    elm = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/a")
+                    title = elm.text
+                    ancher = elm.get_attribute("href")
                     self.debug and print(f"title={title}")
                     rating = 0.1 * (int)(review_elm.find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class").split("_")[3])
                     self.debug and print(f"rating={rating}")
@@ -187,19 +191,19 @@ class ReviewCollector:
                     # date = date.split("\n")[0]
                     self.debug and print(f"date={date}")
 
-                    csv_writer.writerow([url, cat, date, rating, title, review]) 
+                    csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
                 # change the page
                 try:
                     driver.find_element_by_xpath('.//a[@class="nav next ui_button primary"]').click()
                 except Exception:
                     has_more = False
-
+            driver.close()
 
     def fetch_restaurant_reviews(self, url, cat, review_file):
-        driver = self.driver
         with open(review_file, 'a', encoding="utf-8") as csv_file:
             csv_writer = csv.writer(csv_file)
             self.info and print(f"get restaurant {url}")
+            driver = webdriver.Chrome(executable_path=self.driver_path)
             driver.get(url)
             # change the value inside the range to save more or less reviews
             has_more = True
@@ -211,7 +215,9 @@ class ReviewCollector:
 
                 for container in containers:
                     try:
-                        title = container.find_element_by_xpath(".//span[@class='noQuotes']").text
+                        elm = container.find_element_by_xpath(".//div[@class='quote']/a")
+                        title = elm.text
+                        ancher = elm.get_attribute("href")
                         self.debug and print(f"title={title}")
                         rating = container.find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class").split("_")[3]
                         self.debug and print(f"rating={rating}")
@@ -227,7 +233,7 @@ class ReviewCollector:
                         review = container.find_element_by_xpath(".//p[@class='partial_entry']").text.replace("\n", " ").strip()
                         self.debug and print(f"review={review}")
 
-                        csv_writer.writerow([url, cat, date, rating, title, review]) 
+                        csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
                     except Exception:
                         pass
                 # change the page
@@ -236,4 +242,5 @@ class ReviewCollector:
                 except Exception:
                     has_more = False
             # print(len(link_counter))
+            driver.close()
 
