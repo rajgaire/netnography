@@ -107,7 +107,7 @@ class ReviewCollector:
             self.info and print(f"# GET ATTRACTION: {url}")
             driver.get(url)
                 
-            time.sleep(2)
+            time.sleep(5)
             # loop until all reviews pages are done
             has_more = True
             recview_counter = 0
@@ -162,7 +162,7 @@ class ReviewCollector:
             driver = webdriver.Chrome(executable_path=self.driver_path)
             driver.get(url)
                 
-            time.sleep(2)
+            time.sleep(5)
             # loop until all reviews pages are done
             has_more = True
             recview_counter = 0
@@ -195,6 +195,7 @@ class ReviewCollector:
                 # change the page
                 try:
                     driver.find_element_by_xpath('.//a[@class="nav next ui_button primary"]').click()
+                    time.sleep(2)
                 except Exception:
                     has_more = False
             driver.close()
@@ -205,12 +206,12 @@ class ReviewCollector:
             self.info and print(f"get restaurant {url}")
             driver = webdriver.Chrome(executable_path=self.driver_path)
             driver.get(url)
+            time.sleep(5)
             # change the value inside the range to save more or less reviews
             has_more = True
             while has_more:
                 # expand the review 
                 csv_file.flush()
-                time.sleep(2)
                 containers = driver.find_elements_by_xpath(".//div[@class='review-container']")
 
                 for container in containers:
@@ -239,6 +240,7 @@ class ReviewCollector:
                 # change the page
                 try:
                     driver.find_element_by_xpath('.//a[@class="nav next ui_button primary"]').click()
+                    time.sleep(2)
                 except Exception:
                     has_more = False
             # print(len(link_counter))
