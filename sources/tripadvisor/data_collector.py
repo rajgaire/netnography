@@ -13,7 +13,7 @@ class ReviewCollector:
     debug = True
     info = True
 
-    def __init__(self, driver_path, debug=True, info=True) -> None:
+    def __init__(self, driver_path, debug=False, info=True) -> None:
         self.driver_path = driver_path
         self.debug = debug
         self.info = info
@@ -34,12 +34,13 @@ class ReviewCollector:
                     self.debug and print(f"already reviewed = {parts[0]}")
                     if len(parts) > 2:
                         reviewed_links[parts[1]] = True
+        self.info and print(f"{len(reviewed_links)} already reviewed")
         with open(link_file, "r") as csv:
             for aline in csv:
                 parts = aline.split(",")
                 if len(parts) < 3:
                     continue
-                url = "https://www.tripadvisor.com/"+ (parts[3].replace("'", "").strip())
+                url = "https://www.tripadvisor.com"+ (parts[3].replace("'", "").strip())
                 if url in reviewed_links:
                     continue
                 cat = (parts[4].split(":")[1]).replace("'", "").strip()
@@ -50,8 +51,20 @@ class ReviewCollector:
                     self.fetch_restaurant_reviews(url, cat, output_file)
                 elif cat.lower() == "hotels":
                     self.fetch_hotel_reviews(url, cat, output_file)
+                elif cat.lower() == "activity":
+                    self.fetch_attraction_reviews(url, cat, output_file)
+                else:
+                    self.info and print(f"{cat} review is not supported")
 
     def fetch_links(self, place, country, link_file):
+        # check if the link file already exists and is updated within 1 month
+        if os.path.exists(link_file):
+            modified_time = os.path.getmtime(link_file)
+            seconds_in_one_month = 30*24*60*60
+            current_time = time.time()
+            if modified_time + seconds_in_one_month > current_time:
+                return
+        # otherwise, fetch links
         driver = webdriver.Chrome(executable_path=self.driver_path)
         # 1. open https://www.tripadvisor.com/Search?q=<query>""
         url = f'https://www.tripadvisor.com/Search?q={place}'
@@ -120,18 +133,39 @@ class ReviewCollector:
 
                 # get all reviews
                 reviews = driver.find_elements_by_xpath("//div[@id='tab-data-qa-reviews-0']/div/div[5]/div")
-                for i in range(len(reviews)):
-                    review_elm = reviews[i]
-                    if i == len(reviews) - 1:
-                        self.debug and print("- next page -")
-                        # click on the next button
+                if len(reviews) == 0: # it has possibly different format
+                    reviews = driver.find_elements_by_xpath("//div[@data-test-target='reviews-tab']/div/div")
+                    print(f"review counts = {len(reviews)}")
+                    for review_elm in reviews:
+                        recview_counter += 1
+                        self.debug and print(f".{recview_counter}", end="")
                         try:
-                            # print(review_elm.find_element_by_xpath(".//a[@aria-label='Next page']").get_attribute("innerHTML"))
-                            review_elm.find_element_by_xpath(".//a[@aria-label='Next page']").click()
-                            time.sleep(2)
-                        except Exception:
-                            has_more = False
-                    else:
+                            elm = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/a")
+                            title = elm.text
+                            ancher = elm.get_attribute("href")
+                            self.debug and print(f"title={title}")
+                            rating = 0.1 * (int)(review_elm.find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class").split("_")[3])
+                            self.debug and print(f"rating={rating}")
+                            r = review_elm.find_element_by_xpath(".//*[name()='q']")
+                            review = r.text.replace("\n", " ").strip()
+                            self.debug and print(f"review={review}")
+                            
+                            d = review_elm.find_element_by_xpath(".//span/span[text()='Date of experience:']/parent::node()")
+                            date = d.text.split(":")[1].strip()
+                            self.debug and print(f"date={date}")
+
+                            csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
+                        except Exception as e:
+                            self.debug and print(f"Error: {e}")
+                    # change the page
+                    try:
+                        driver.find_element_by_class_name('next').click()
+                        time.sleep(2)
+                    except Exception:
+                        has_more = False
+                else:
+                    review_elm = None
+                    for review_elm in reviews:
                         recview_counter += 1
                         self.debug and print(f".{recview_counter}", end="")
                         self.debug and print(driver.current_url)
@@ -142,17 +176,35 @@ class ReviewCollector:
                             title = t.text
                             self.debug and print(f"title={title}")
                             ancher = t.get_attribute("href")
-                            d = review_elm.find_element_by_xpath("./span/span/div[5]")
-                            date = d.text
-                            self.debug and print(f"date={date}")
-                            r = review_elm.find_element_by_xpath("./span/span/div[6]/div/div/span")
-                            review = r.text.replace("\n", " ").strip()
-                            self.debug and print(f"review={review}")
+                            try:
+                                r = review_elm.find_element_by_xpath("./span/span/div[6]/div/div/span")
+                                review = r.text.replace("\n", " ").strip()
+                                self.debug and print(f"review={review}")
+
+                                d = review_elm.find_element_by_xpath("./span/span/div[5]")
+                                date = d.text
+                                self.debug and print(f"date={date}")
+                            except Exception:
+                                r = review_elm.find_element_by_xpath("./span/span/div[5]/div/div/span")
+                                review = r.text.replace("\n", " ").strip()
+                                self.debug and print(f"review={review}")
+                                d = review_elm.find_element_by_xpath("./span/span/div[7]/div")
+                                date = d.text
+                                self.debug and print(f"date={date}")
 
                             csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
                         except Exception as e:
                             print(e)
-                            # pass
+                                # pass
+                    # click on the next button
+                    try:
+                        # print(review_elm.find_element_by_xpath(".//a[@aria-label='Next page']").get_attribute("innerHTML"))
+                        review_elm.find_element_by_xpath(".//a[@aria-label='Next page']").click()
+                        time.sleep(2)
+                        self.debug and print("- next page -")
+                    except Exception:
+                        has_more = False
+            csv_writer.writerow(["-", url, "-", "-", "-", "-", "-"]) 
         driver.close()
 
     def fetch_hotel_reviews(self, url, cat, review_file):
@@ -170,34 +222,40 @@ class ReviewCollector:
                 # get all reviews
                 reviews = driver.find_elements_by_xpath("//div[@data-test-target='HR_CC_CARD']")
                 self.debug and print(f"Total reviews: {len(reviews)}")
+                if len(reviews) == 0:
+                    has_more = False
                 for i in range(len(reviews)):
                     recview_counter += 1
                     review_elm = reviews[i]
                     self.debug and print(f".{recview_counter}", end="")
-                    elm = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/a")
-                    title = elm.text
-                    ancher = elm.get_attribute("href")
-                    self.debug and print(f"title={title}")
-                    rating = 0.1 * (int)(review_elm.find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class").split("_")[3])
-                    self.debug and print(f"rating={rating}")
-                    r = review_elm.find_element_by_xpath(".//*[name()='q']")
-                    review = r.text.replace("\n", " ").strip()
-                    self.debug and print(f"review={review}")
-                    
-                    # d = review_elm.find_element_by_xpath("./div[2]/div[3]/div[2]/span")
-                    div = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/following-sibling::div")
-                    d = div.find_element_by_xpath(".//span/span[text()='Date of stay:']/parent::node()")
-                    date = d.text.split(":")[1].strip()
-                    # date = date.split("\n")[0]
-                    self.debug and print(f"date={date}")
+                    try:
+                        elm = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/a")
+                        title = elm.text
+                        ancher = elm.get_attribute("href")
+                        self.debug and print(f"title={title}")
+                        rating = 0.1 * (int)(review_elm.find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class").split("_")[3])
+                        self.debug and print(f"rating={rating}")
+                        r = review_elm.find_element_by_xpath(".//*[name()='q']")
+                        review = r.text.replace("\n", " ").strip()
+                        self.debug and print(f"review={review}")
+                        
+                        # d = review_elm.find_element_by_xpath("./div[2]/div[3]/div[2]/span")
+                        div = review_elm.find_element_by_xpath("./div/div[@data-test-target='review-title']/following-sibling::div")
+                        d = div.find_element_by_xpath(".//span/span[text()='Date of stay:']/parent::node()")
+                        date = d.text.split(":")[1].strip()
+                        # date = date.split("\n")[0]
+                        self.debug and print(f"date={date}")
 
-                    csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
+                        csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
+                    except:
+                        pass
                 # change the page
                 try:
                     driver.find_element_by_xpath('.//a[@class="nav next ui_button primary"]').click()
                     time.sleep(2)
                 except Exception:
                     has_more = False
+            csv_writer.writerow(["-", url, "-", "-", "-", "-", "-"]) 
             driver.close()
 
     def fetch_restaurant_reviews(self, url, cat, review_file):
@@ -214,6 +272,8 @@ class ReviewCollector:
                 csv_file.flush()
                 containers = driver.find_elements_by_xpath(".//div[@class='review-container']")
 
+                if len(containers) == 0:
+                    has_more = False
                 for container in containers:
                     try:
                         elm = container.find_element_by_xpath(".//div[@class='quote']/a")
@@ -244,5 +304,6 @@ class ReviewCollector:
                 except Exception:
                     has_more = False
             # print(len(link_counter))
+            csv_writer.writerow(["-", url, "-", "-", "-", "-", "-"]) 
             driver.close()
 
