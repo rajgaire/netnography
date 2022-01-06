@@ -27,6 +27,10 @@ def main(argv):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     collector.fetch_reviews(place, country, f"./output/{country}/{place}.txt")
+    # self, authenticity_type, keyword_file, review_file, output_folder):
+    collector.filter_authenticity("object-authenticity", "../../keywords/object-authenticity.txt", f"./output/{country}/{place}.txt", output_folder)
+    collector.filter_authenticity("constructive-authenticity", "../../keywords/constructive-authenticity.txt", f"./output/{country}/{place}.txt", output_folder)
+    collector.filter_authenticity("existential-authenticity", "../../keywords/existential-authenticity.txt", f"./output/{country}/{place}.txt", output_folder)
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:

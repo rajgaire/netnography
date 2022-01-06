@@ -5,7 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
-import os, time
+import os, time, re
 import csv
 
 class ReviewCollector:
@@ -188,9 +188,16 @@ class ReviewCollector:
                                 r = review_elm.find_element_by_xpath("./span/span/div[5]/div/div/span")
                                 review = r.text.replace("\n", " ").strip()
                                 self.debug and print(f"review={review}")
-                                d = review_elm.find_element_by_xpath("./span/span/div[7]/div")
-                                date = d.text
-                                self.debug and print(f"date={date}")
+                                try: 
+                                    # without images
+                                    d = review_elm.find_element_by_xpath("./span/span/div[7]/div")
+                                    date = d.text
+                                    self.debug and print(f"date={date}")
+                                except Exception:
+                                    # with images
+                                    d = review_elm.find_element_by_xpath("./span/span/div[8]/div")
+                                    date = d.text
+                                    self.debug and print(f"date={date}")
 
                             csv_writer.writerow([ancher, url, cat, date, rating, title, review]) 
                         except Exception as e:
@@ -307,3 +314,53 @@ class ReviewCollector:
             csv_writer.writerow(["-", url, "-", "-", "-", "-", "-"]) 
             driver.close()
 
+    def _get_keywords(self, keyword_file):
+        keywords = []
+        with open(keyword_file, "r", encoding="utf8") as kf:
+            lines = kf.readlines()
+            for l in lines:
+                l = l.strip().lower()
+                if l == "": 
+                    continue
+                else:
+                    keywords.append(l)
+        return keywords
+    def _get_all_reviews(self, review_file):
+        all_reviews = []
+        with open(review_file, "r", encoding="utf8") as kf:
+            lines = kf.readlines()
+            for l in lines:
+                l = l.strip()
+                if l != "":
+                    all_reviews.append(l)
+        return all_reviews
+
+    def filter_authenticity(self, authenticity_type, keyword_file, review_file, output_folder):
+        keywords = self._get_keywords(keyword_file)
+        # regexes = []
+        # get old reviews to skip
+        auth_reviews = ""
+        if os.path.exists(f"{output_folder}/{authenticity_type}.txt"):
+            with open(f"{output_folder}/{authenticity_type}.txt", "r", encoding="utf8")  as output:
+                auth_reviews = "#".join( output.readlines() )
+
+        all_reviews = self._get_all_reviews(review_file)
+
+        with open(f"{output_folder}/{authenticity_type}.txt", "a", encoding="utf8")  as output:
+            for review in all_reviews:
+                if  review in auth_reviews:
+                    continue
+                rv_lower = ",".join(review.split(",")[4:]).lower()
+                relevant_keywords = []
+                for k in keywords:
+                    to_search = r'\b'+k+r'\b'
+                    if "******" in k:
+                        to_search = r'\b'+ k.replace("******", r"\w+") +r'\b'
+                    try:
+                        if re.search(to_search, rv_lower):
+                            relevant_keywords.append(k)
+                    except Exception as e:
+                        print(f"searching: {to_search}")
+                        print(e)
+                if len(relevant_keywords) > 0:
+                    output.write(";".join(relevant_keywords) + "," + review + "\n")
